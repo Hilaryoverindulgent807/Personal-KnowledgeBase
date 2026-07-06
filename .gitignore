@@ -1,0 +1,44 @@
+# 环境变量文件（敏感信息）
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.iws
+*.iml
+*.ipr
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 项目数据（不开源）
+llm_wiki/
+data/
+uploads/
+raw/
+config/
+origin/
+
+# 构建产物
+target/
+node_modules/
+dist/
+
+# 日志和数据库
+*.log
+*.db
+*.db-shm
+*.db-wal
+
+# 工具和缓存
+.trae/
+.memsearch/
+.pytest_cache/
+__pycache__/
+*.pyc
+
+# 项目文件（不开源）
+*.docx

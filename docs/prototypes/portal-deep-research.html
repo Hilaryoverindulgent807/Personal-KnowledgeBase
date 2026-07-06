@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>前台原型 - 深度研究</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #FAFBFC; color: #334155; }
+
+  .top-bar {
+    height: 48px; background: linear-gradient(90deg, #2F5496, #4A90D9);
+    display: flex; align-items: center; justify-content: center;
+    position: relative; border-radius: 0 0 10px 10px;
+  }
+  .top-bar .title { font-size: 18px; font-weight: bold; color: white; }
+  .top-bar .admin-btn { position: absolute; right: 20px; font-size: 13px; color: rgba(255,255,255,0.8); text-decoration: none; }
+
+  .tab-nav {
+    display: flex; gap: 15px; margin: 12px 20px;
+    background: white; border-radius: 8px; padding: 6px;
+    border: 1px solid #E2E8F0; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .tab-item { flex: 1; text-align: center; padding: 10px 0; font-size: 15px; font-weight: 600; color: #475569; border-radius: 6px; cursor: pointer; }
+  .tab-item.active { background: linear-gradient(180deg, #4A90D9, #3A7BC8); color: white; }
+
+  .content { padding: 0 20px 20px; }
+
+  .research-layout { display: flex; gap: 16px; }
+
+  .task-panel {
+    width: 300px; flex-shrink: 0;
+    border: 1px solid #E2E8F0; border-radius: 8px;
+    height: 550px; display: flex; flex-direction: column;
+  }
+  .panel-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px; border-bottom: 1px solid #E2E8F0;
+    font-weight: bold; font-size: 13px; color: #334155;
+  }
+  .btn-xs {
+    padding: 3px 10px; background: #4A90D9; color: white;
+    border: none; border-radius: 4px; font-size: 11px; cursor: pointer;
+  }
+  .task-list { flex: 1; overflow-y: auto; padding: 8px; }
+
+  .task-item {
+    padding: 12px; border-radius: 6px; cursor: pointer;
+    margin-bottom: 6px; border: 1px solid #F1F5F9;
+  }
+  .task-item:hover { background: #F5F7FA; }
+  .task-item.active { background: #E8F0FE; border-color: #4A90D9; }
+  .task-title { font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 6px; }
+  .task-meta { display: flex; justify-content: space-between; align-items: center; }
+  .task-time { font-size: 11px; color: #94A3B8; }
+
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+  .tag-success { background: #D1FAE5; color: #065F46; }
+  .tag-warning { background: #FEF3C7; color: #92400E; }
+  .tag-info { background: #E2E8F0; color: #475569; }
+  .tag-danger { background: #FEE2E2; color: #991B1B; }
+
+  .progress-bar {
+    height: 6px; background: #E2E8F0; border-radius: 3px;
+    margin-top: 6px; overflow: hidden;
+  }
+  .progress-fill { height: 100%; background: #4A90D9; border-radius: 3px; transition: width 0.3s; }
+
+  .result-panel {
+    flex: 1; border: 1px solid #E2E8F0; border-radius: 8px;
+    min-height: 550px; padding: 20px;
+  }
+  .result-header { margin-bottom: 16px; }
+  .result-header h3 { margin: 0 0 8px; color: #1E293B; }
+  .result-meta { display: flex; gap: 12px; align-items: center; font-size: 12px; color: #64748B; }
+
+  .synthesis {
+    font-size: 14px; line-height: 1.8; color: #334155;
+  }
+  .synthesis h2 { font-size: 18px; color: #1E293B; margin: 20px 0 10px; border-bottom: 1px solid #E2E8F0; padding-bottom: 6px; }
+  .synthesis h3 { font-size: 15px; color: #334155; margin: 16px 0 8px; }
+  .synthesis ul { padding-left: 20px; }
+  .synthesis li { margin-bottom: 4px; }
+  .synthesis .source-ref { color: #4A90D9; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <span class="title">前台 — 分析工作空间</span>
+  <a class="admin-btn" href="#">后台管理 →</a>
+</div>
+
+<div class="tab-nav">
+  <div class="tab-item">研究报告</div>
+  <div class="tab-item">智能问答</div>
+  <div class="tab-item active">深度研究</div>
+</div>
+
+<div class="content">
+  <div class="research-layout">
+    <!-- 左侧任务列表 -->
+    <div class="task-panel">
+      <div class="panel-header">
+        <span>深度研究</span>
+        <button class="btn-xs">+ 新建研究</button>
+      </div>
+      <div class="task-list">
+        <div class="task-item active">
+          <div class="task-title">量子计算发展现状与趋势</div>
+          <div class="task-meta">
+            <span class="tag tag-success">已完成</span>
+            <span class="task-time">2026-06-30 14:20</span>
+          </div>
+        </div>
+        <div class="task-item">
+          <div class="task-title">AI芯片供应链风险评估</div>
+          <div class="task-meta">
+            <span class="tag tag-warning">研究中</span>
+            <span class="task-time">2026-06-30 15:00</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" style="width: 60%;"></div></div>
+        </div>
+        <div class="task-item">
+          <div class="task-title">全球网络安全法规变化</div>
+          <div class="task-meta">
+            <span class="tag tag-info">排队中</span>
+            <span class="task-time">2026-06-30 15:30</span>
+          </div>
+        </div>
+        <div class="task-item">
+          <div class="task-title">后量子密码标准化进展</div>
+          <div class="task-meta">
+            <span class="tag tag-danger">失败</span>
+            <span class="task-time">2026-06-29 10:00</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右侧研究结果 -->
+    <div class="result-panel">
+      <div class="result-header">
+        <h3>量子计算发展现状与趋势</h3>
+        <div class="result-meta">
+          <span class="tag tag-success">已完成</span>
+          <span>来源: 12篇</span>
+          <span>完成: 2026-06-30 14:35</span>
+        </div>
+      </div>
+
+      <div class="synthesis">
+        <h2>背景概述</h2>
+        <p>量子计算是利用量子力学原理进行信息处理的新型计算范式。近年来，随着量子比特数量的增长和纠错技术的突破，量子计算正从实验室走向实用化阶段。本报告综合分析了全球主要国家和企业在量子计算领域的最新进展。</p>
+
+        <h2>核心发现</h2>
+        <h3>1. 技术里程碑</h3>
+        <ul>
+          <li>IBM 于 2025 年推出 4,000+ 量子比特的 Kookaburra 处理器 <span class="source-ref">[来源1]</span></li>
+          <li>Google 量子团队实现了低于阈值的量子纠错，逻辑错误率降至 10⁻⁶ <span class="source-ref">[来源3]</span></li>
+          <li>中国"祖冲之号"在特定问题上实现 10¹⁸ 倍量子优势 <span class="source-ref">[来源5]</span></li>
+        </ul>
+
+        <h3>2. 产业化进展</h3>
+        <ul>
+          <li>全球量子计算市场规模预计 2028 年达到 650 亿美元</li>
+          <li>金融、制药、材料模拟领域开始部署量子计算解决方案</li>
+          <li>云量子计算服务（AWS Braket、Azure Quantum）降低使用门槛</li>
+        </ul>
+
+        <h2>趋势研判</h2>
+        <p>未来 3-5 年内，量子计算将在特定领域（密码分析、药物设计、优化问题）展现出超越经典计算机的实际价值。但通用容错量子计算机仍需要 10 年以上的工程突破。</p>
+
+        <h2>风险与挑战</h2>
+        <ul>
+          <li>量子纠错开销仍然巨大（1 个逻辑比特需要 1000+ 物理比特）</li>
+          <li>量子软件生态不成熟，缺乏标准化编程框架</li>
+          <li>人才稀缺，全球量子计算专业人才缺口约 20 万人</li>
+        </ul>
+
+        <h2>建议</h2>
+        <ul>
+          <li>优先启动后量子密码（PQC）迁移计划</li>
+          <li>建立量子安全威胁评估清单，对高价值资产进行风险评估</li>
+          <li>持续跟踪主要厂商的量子硬件路线图</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
