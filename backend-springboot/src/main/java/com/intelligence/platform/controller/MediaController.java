@@ -39,8 +39,26 @@ public class MediaController {
 
     private static final Logger log = LoggerFactory.getLogger(MediaController.class);
 
-    @Value("${upload.dir:../uploads}")
+    @Value("${upload.dir:./uploads}")
     private String uploadDir;
+
+    @Autowired(required = false)
+    private com.intelligence.platform.mapper.SettingMapper settingMapper;
+
+    /**
+     * 获取实际生效的上传目录（优先从数据库读取，回退到配置文件）
+     */
+    private String getEffectiveUploadDir() {
+        if (settingMapper != null) {
+            try {
+                com.intelligence.platform.entity.Setting setting = settingMapper.selectById("upload_dir");
+                if (setting != null && setting.getValue() != null && !setting.getValue().isBlank()) {
+                    return setting.getValue();
+                }
+            } catch (Exception ignored) {}
+        }
+        return uploadDir;
+    }
 
     @Autowired
     private ImageService imageService;
@@ -60,7 +78,7 @@ public class MediaController {
     @GetMapping("/{docId}/{filename}")
     public ResponseEntity<Resource> getMedia(@PathVariable String docId, @PathVariable String filename) {
         try {
-            Path filePath = Paths.get(uploadDir, "media", docId, filename).toAbsolutePath().normalize();
+            Path filePath = Paths.get(getEffectiveUploadDir(), "media", docId, filename).toAbsolutePath().normalize();
             log.debug("媒体请求: /api/media/{}/{} -> 解析路径: {}", docId, filename, filePath);
 
             if (!Files.exists(filePath)) {
@@ -313,14 +331,14 @@ public class MediaController {
             }
 
             // 获取 PDF 文件绝对路径
-            Path pdfPath = Paths.get(uploadDir, doc.getFilePath().replace("../uploads/", "")).toAbsolutePath().normalize();
+            Path pdfPath = Paths.get(getEffectiveUploadDir(), doc.getFilePath().replace("../uploads/", "")).toAbsolutePath().normalize();
             if (!Files.exists(pdfPath) || !pdfPath.toString().toLowerCase().endsWith(".pdf")) {
                 log.warn("getPdfCover: PDF文件不存在或格式不正确: {}", pdfPath);
                 return ResponseEntity.notFound().build();
             }
 
             // 封面图片保存路径
-            Path coverPath = Paths.get(uploadDir, "media", String.valueOf(docId), "cover.png").toAbsolutePath().normalize();
+            Path coverPath = Paths.get(getEffectiveUploadDir(), "media", String.valueOf(docId), "cover.png").toAbsolutePath().normalize();
             
             // 如果不存在封面，调用 Python 脚本生成
             if (!Files.exists(coverPath)) {
@@ -368,7 +386,7 @@ public class MediaController {
             }
 
             // 解析文件绝对路径: filePath 格式为 ../uploads/raw/sources/xxx.png
-            Path filePath = Paths.get(uploadDir, doc.getFilePath().replace("../uploads/", "")).toAbsolutePath().normalize();
+            Path filePath = Paths.get(getEffectiveUploadDir(), doc.getFilePath().replace("../uploads/", "")).toAbsolutePath().normalize();
             if (!Files.exists(filePath)) {
                 log.warn("getDocFile: 文件不存在: {} (docId={})", filePath, docId);
                 return ResponseEntity.notFound().build();

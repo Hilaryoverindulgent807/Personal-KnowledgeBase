@@ -43,8 +43,21 @@ public class ImageService {
     @Autowired
     private com.intelligence.platform.mapper.SettingMapper settingMapper;
 
-    @Value("${upload.dir:../uploads}")
+    @Value("${upload.dir:./uploads}")
     private String uploadDir;
+
+    /**
+     * 获取实际生效的上传目录（优先从数据库读取，回退到配置文件）
+     */
+    private String getEffectiveUploadDir() {
+        try {
+            com.intelligence.platform.entity.Setting setting = settingMapper.selectById("upload_dir");
+            if (setting != null && setting.getValue() != null && !setting.getValue().isBlank()) {
+                return setting.getValue();
+            }
+        } catch (Exception ignored) {}
+        return uploadDir;
+    }
 
     /** 图片最小尺寸（像素），过滤logo/装饰等小图 */
     private static final int MIN_IMAGE_SIZE = 100;
@@ -100,7 +113,7 @@ public class ImageService {
      * @return 保存后的相对路径
      */
     public String saveImage(byte[] imageData, Long docId, int imageIndex, String extension) throws Exception {
-        Path mediaDir = Paths.get(uploadDir, "media", String.valueOf(docId));
+        Path mediaDir = Paths.get(getEffectiveUploadDir(), "media", String.valueOf(docId));
         Files.createDirectories(mediaDir);
         String filename = imageIndex + "." + extension;
         Path filePath = mediaDir.resolve(filename);

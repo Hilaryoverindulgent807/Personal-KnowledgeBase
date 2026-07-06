@@ -298,6 +298,18 @@
                 <el-input-number v-model="generalForm.research_max_results_per_query" :min="3" :max="20" />
               </el-form-item>
 
+              <el-divider content-position="left">存储路径</el-divider>
+              <el-form-item label="上传文件存储目录">
+                <el-input v-model="generalForm.upload_dir" placeholder="默认: ./uploads（相对于后端启动目录）">
+                  <template #append>
+                    <el-tooltip content="修改后需重启后端服务才能生效" placement="top">
+                      <el-icon><InfoFilled /></el-icon>
+                    </el-tooltip>
+                  </template>
+                </el-input>
+                <div class="form-hint">上传文件、来源资料的存储根目录。可使用绝对路径（如 /data/uploads）或相对路径（如 ./my_uploads）。修改后需重启后端服务。</div>
+              </el-form-item>
+
               <el-divider content-position="left">界面设置</el-divider>
               <el-form-item label="默认语言">
                 <el-select v-model="generalForm.language">
@@ -1239,6 +1251,7 @@ const generalForm = reactive({
   qa_table_topK: 3,
   research_query_count: 5,
   research_max_results_per_query: 10,
+  upload_dir: '',
   language: 'zh',
   theme: 'light',
 })
@@ -1261,6 +1274,7 @@ async function loadGeneral() {
     if (data.qa_table_topK) generalForm.qa_table_topK = parseInt(data.qa_table_topK) || 3
     if (data.research_query_count) generalForm.research_query_count = parseInt(data.research_query_count) || 5
     if (data.research_max_results_per_query) generalForm.research_max_results_per_query = parseInt(data.research_max_results_per_query) || 10
+    if (data.upload_dir) generalForm.upload_dir = data.upload_dir
     if (data.language) generalForm.language = data.language
     if (data.theme) generalForm.theme = data.theme
   } catch (e) { console.error(e) }
@@ -1282,6 +1296,7 @@ async function saveGeneral() {
       qa_table_topK: String(generalForm.qa_table_topK),
       research_query_count: String(generalForm.research_query_count),
       research_max_results_per_query: String(generalForm.research_max_results_per_query),
+      upload_dir: generalForm.upload_dir,
       language: generalForm.language,
       theme: generalForm.theme,
     }

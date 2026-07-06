@@ -74,10 +74,24 @@ const resetTimeout = () => {
   startTimeout()
 }
 
+// 跳过启动等待，直接进入系统
+const handleSkip = () => {
+  clearDotsAnimation()
+  clearTimeout(timeoutTimer)
+  isVisible.value = false
+  emit('ready')
+}
+
 // 重试按钮处理
 const handleRetry = async () => {
   resetTimeout()
   const started = await startBackend()
+  if (!started) {
+    errorMessage.value = '发送启动命令失败。请手动检查 Spring Boot 后端是否在运行。'
+    showError.value = true
+    clearDotsAnimation()
+  }
+}
   if (!started) {
     errorMessage.value = '发送启动命令失败。请手动检查 Spring Boot 后端是否在运行。'
     showError.value = true
@@ -167,6 +181,9 @@ onUnmounted(() => {
           <div class="status-msg">
             {{ statusText }}{{ dots }}
           </div>
+          <el-button class="skip-waiting-btn" text size="small" @click="handleSkip">
+            跳过等待，直接进入
+          </el-button>
         </div>
 
         <!-- 错误/超时区域 -->
@@ -181,6 +198,9 @@ onUnmounted(() => {
             <div class="action-buttons">
               <el-button type="primary" class="retry-btn" @click="handleRetry">
                 重试
+              </el-button>
+              <el-button class="skip-btn" @click="handleSkip">
+                跳过，直接进入系统
               </el-button>
             </div>
           </div>
@@ -377,6 +397,39 @@ onUnmounted(() => {
 .retry-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 114, 255, 0.4);
+}
+
+.skip-btn {
+  background: transparent;
+  border: 1px solid rgba(160, 166, 181, 0.3);
+  color: #a0a6b5;
+  font-weight: 500;
+  padding: 10px 24px;
+  border-radius: 8px;
+  transition: all 0.3s;
+  margin-left: 12px;
+}
+.skip-btn:hover {
+  border-color: rgba(160, 166, 181, 0.6);
+  color: #d0d5e0;
+}
+
+.skip-waiting-btn {
+  margin-top: 16px;
+  color: rgba(160, 166, 181, 0.5) !important;
+  font-size: 12px;
+  transition: color 0.3s;
+}
+.skip-waiting-btn:hover {
+  color: rgba(160, 166, 181, 0.9) !important;
+}
+
+.action-buttons {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 /* 过渡动画 */

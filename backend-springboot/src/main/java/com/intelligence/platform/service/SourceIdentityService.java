@@ -1,5 +1,8 @@
 package com.intelligence.platform.service;
 
+import com.intelligence.platform.entity.Setting;
+import com.intelligence.platform.mapper.SettingMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -15,14 +18,34 @@ public class SourceIdentityService {
     private static final String RAW_SOURCES_PREFIX = "raw/sources/";
     private static final String RAW_SOURCES_MARKER = "/raw/sources/";
 
-    @Value("${upload.dir:../uploads}")
+    @Value("${upload.dir:./uploads}")
     private String uploadDir;
+
+    @Autowired(required = false)
+    private SettingMapper settingMapper;
+
+    /**
+     * 获取实际使用的上传目录（优先从数据库读取，回退到配置文件）
+     */
+    public String getEffectiveUploadDir() {
+        if (settingMapper != null) {
+            try {
+                Setting setting = settingMapper.selectById("upload_dir");
+                if (setting != null && setting.getValue() != null && !setting.getValue().isBlank()) {
+                    return setting.getValue();
+                }
+            } catch (Exception ignored) {
+                // 数据库不可用时回退到配置文件
+            }
+        }
+        return uploadDir;
+    }
 
     /**
      * 获取 raw/sources 目录的绝对路径
      */
     public Path getSourcesRoot() {
-        return Path.of(uploadDir, "raw", "sources");
+        return Path.of(getEffectiveUploadDir(), "raw", "sources");
     }
 
     /**
@@ -34,7 +57,7 @@ public class SourceIdentityService {
         String normalized = filePath.replace('\\', '/');
 
         // 去除 uploadDir 前缀
-        String uploadPrefix = uploadDir.replace('\\', '/');
+        String uploadPrefix = getEffectiveUploadDir().replace('\\', '/');
         if (normalized.startsWith(uploadPrefix)) {
             normalized = normalized.substring(uploadPrefix.length());
         }

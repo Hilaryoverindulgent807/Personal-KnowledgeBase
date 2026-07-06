@@ -42,8 +42,15 @@ public class SourcesController {
     @Autowired
     private SourceIdentityService sourceIdentityService;
 
-    @Value("${upload.dir:../uploads}")
+    @Value("${upload.dir:./uploads}")
     private String uploadDir;
+
+    /**
+     * 获取实际生效的上传目录
+     */
+    private String getEffectiveUploadDir() {
+        return sourceIdentityService.getEffectiveUploadDir();
+    }
 
     /**
      * 获取来源目录树（参考 llm_wiki listDirectory）

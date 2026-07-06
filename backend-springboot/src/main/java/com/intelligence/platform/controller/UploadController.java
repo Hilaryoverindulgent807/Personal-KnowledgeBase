@@ -47,8 +47,26 @@ public class UploadController {
     @Autowired
     private com.intelligence.platform.mapper.ProjectMapper projectMapper;
 
+    @Autowired(required = false)
+    private com.intelligence.platform.mapper.SettingMapper settingMapper;
+
     @Value("${upload.dir:./uploads}")
     private String uploadDir;
+
+    /**
+     * 获取实际生效的上传目录（优先从数据库读取，回退到配置文件）
+     */
+    private String getEffectiveUploadDir() {
+        if (settingMapper != null) {
+            try {
+                com.intelligence.platform.entity.Setting setting = settingMapper.selectById("upload_dir");
+                if (setting != null && setting.getValue() != null && !setting.getValue().isBlank()) {
+                    return setting.getValue();
+                }
+            } catch (Exception ignored) {}
+        }
+        return uploadDir;
+    }
 
     /** docType → 库中文名映射 */
     private static final java.util.Map<String, String> DOC_TYPE_LABELS = java.util.Map.of(
@@ -141,7 +159,7 @@ public class UploadController {
                     "fileSize", validation.fileSize());
         }
 
-        Path uploadPath = Paths.get(uploadDir);
+        Path uploadPath = Paths.get(getEffectiveUploadDir());
         Files.createDirectories(uploadPath);
 
         byte[] content = file.getBytes();
@@ -431,7 +449,7 @@ public class UploadController {
             @RequestParam(defaultValue = "false") boolean autoClassify,
             @RequestParam(defaultValue = "") String sourceOrigin) throws Exception {
 
-        Path uploadPath = Paths.get(uploadDir);
+        Path uploadPath = Paths.get(getEffectiveUploadDir());
         Files.createDirectories(uploadPath);
 
         List<Map<String, Object>> results = new java.util.ArrayList<>();

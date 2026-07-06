@@ -45,8 +45,26 @@ public class VectorSearchService {
     @Autowired
     private KnowledgeEntryMapper knowledgeEntryMapper;
 
-    @Value("${upload.dir:../uploads}")
+    @Autowired(required = false)
+    private com.intelligence.platform.mapper.SettingMapper settingMapper;
+
+    @Value("${upload.dir:./uploads}")
     private String uploadDir;
+
+    /**
+     * 获取实际生效的上传目录
+     */
+    private String getEffectiveUploadDir() {
+        if (settingMapper != null) {
+            try {
+                com.intelligence.platform.entity.Setting setting = settingMapper.selectById("upload_dir");
+                if (setting != null && setting.getValue() != null && !setting.getValue().isBlank()) {
+                    return setting.getValue();
+                }
+            } catch (Exception ignored) {}
+        }
+        return uploadDir;
+    }
 
     private final ObjectMapper mapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newBuilder()
@@ -58,7 +76,7 @@ public class VectorSearchService {
 
     @PostConstruct
     public void init() {
-        Path indexPath = Path.of(uploadDir, "vector-index.json");
+        Path indexPath = Path.of(getEffectiveUploadDir(), "vector-index.json");
         index = new VectorIndex(indexPath);
         indexReady = true;
         log.info("向量搜索服务初始化完成，索引大小: {}", index.size());
