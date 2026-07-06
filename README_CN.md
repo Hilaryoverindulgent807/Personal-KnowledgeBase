@@ -17,9 +17,6 @@
   <a href="README.md">English</a> | 中文
 </p>
 ---
-<p align="center">
-  <img src="docs/project-architecture.svg" width="100%" alt="系统架构图">
-</p>
 
 ## 功能特性
 
@@ -39,18 +36,6 @@
 Personal Knowledge Base 是一个跨平台桌面应用，能将你的文档自动转化为有组织、相互关联的知识库。不同于传统 RAG（每次都从零检索回答），本系统**增量构建和维护结构化知识词条**。知识只编译一次并持续更新，而非每次查询都重新推导。
 
 本项目基于 [Karpathy 的 LLM Wiki 模式](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)，并受 [LLM Wiki](https://github.com/nashsu/llm_wiki) 启发。我们将核心理念实现为一个完整的全栈 Web 应用，并在企业级文档管理与分析方面做了大量增强。
-
-### 与 LLM Wiki 的关键差异
-
-| 维度 | LLM Wiki | Personal Knowledge Base |
-|------|----------|------------------------|
-| 架构 | 桌面应用（Electron） | 全栈 Web 应用（Spring Boot + Vue 3） |
-| 数据库 | 文件型 Wiki | SQLite + MyBatis-Plus ORM |
-| 前端 | React | Vue 3 + Element Plus |
-| 文档类型 | Markdown、网页 | PDF、Word、Excel、图片、文本 |
-| 知识格式 | YAML 前置元数据的 Wiki 页面 | 结构化分类知识词条 |
-| 项目模型 | 单一 Wiki | 多项目隔离 |
-| 部署方式 | 本地桌面 | Web + Tauri 桌面端 |
 
 ## 系统架构
 
