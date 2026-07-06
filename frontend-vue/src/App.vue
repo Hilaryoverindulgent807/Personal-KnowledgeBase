@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { listen } from '@tauri-apps/api/event'
 import { useRouter } from 'vue-router'
+import { isTauri } from './composables/useTauri'
 import SplashScreen from './components/SplashScreen.vue'
 import UpdateDialog from './components/UpdateDialog.vue'
 import FirstRunWizard from './components/FirstRunWizard.vue'
@@ -13,9 +13,16 @@ const router = useRouter()
 let unlisten: (() => void) | null = null
 
 onMounted(async () => {
-  unlisten = await listen('open-settings', () => {
-    router.push('/admin/settings')
-  })
+  if (isTauri()) {
+    try {
+      const { listen } = await import('@tauri-apps/api/event')
+      unlisten = await listen('open-settings', () => {
+        router.push('/admin/settings')
+      })
+    } catch (e) {
+      console.error('Failed to register open-settings listener:', e)
+    }
+  }
 })
 
 onUnmounted(() => {

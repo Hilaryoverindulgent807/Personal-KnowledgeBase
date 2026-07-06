@@ -33,6 +33,15 @@ src-tauri/binaries/*.jar
 *.db
 *.db-shm
 *.db-wal
+**/logs/
+
+# 向量索引（运行时生成，不开源）
+vector-index.json
+*.first-run
+
+# 上传文件（不开源）
+uploads/media/
+uploads/raw/
 
 # 工具和缓存
 .trae/

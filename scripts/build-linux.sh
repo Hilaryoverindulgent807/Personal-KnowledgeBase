@@ -56,7 +56,8 @@ npm install
 echo "-----------------------------------------"
 echo "4. 正在执行 Tauri 桌面打包..."
 echo "-----------------------------------------"
-npx tauri build
+cd "$ROOT_DIR"
+npx --prefix frontend-vue tauri build
 
 echo "========================================="
 echo "🎉 构建成功完成！"

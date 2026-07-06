@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import org.springframework.scheduling.annotation.Async;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -53,11 +54,13 @@ public class VectorSearchService {
             .build();
 
     private VectorIndex index;
+    private volatile boolean indexReady = false;
 
     @PostConstruct
     public void init() {
         Path indexPath = Path.of(uploadDir, "vector-index.json");
         index = new VectorIndex(indexPath);
+        indexReady = true;
         log.info("向量搜索服务初始化完成，索引大小: {}", index.size());
     }
 
@@ -79,7 +82,6 @@ public class VectorSearchService {
 
         String url = resolveEmbeddingUrl(config);
         String body = buildEmbeddingBody(config, text);
-        String authHeader = buildAuthHeader(config);
 
         HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(url))
@@ -87,8 +89,13 @@ public class VectorSearchService {
                 .timeout(Duration.ofSeconds(60))
                 .POST(HttpRequest.BodyPublishers.ofString(body));
 
-        if (authHeader != null) {
-            reqBuilder.header("Authorization", authHeader);
+        String apiKey = config.getApiKey();
+        if (apiKey != null && !apiKey.isEmpty()) {
+            if ("google".equals(config.getProvider())) {
+                reqBuilder.header("x-goog-api-key", apiKey);
+            } else if (!"ollama".equals(config.getProvider())) {
+                reqBuilder.header("Authorization", "Bearer " + apiKey);
+            }
         }
 
         HttpResponse<String> response = httpClient.send(reqBuilder.build(),
@@ -226,8 +233,23 @@ public class VectorSearchService {
 
     /**
      * 批量重建索引（从数据库中加载所有已审核词条）
+     * 异步执行，避免阻塞主线程
      */
-    public int rebuildIndex() {
+    @Async("taskExecutor")
+    public void rebuildIndexAsync() {
+        log.info("异步重建索引开始...");
+        try {
+            int count = rebuildIndexSync();
+            log.info("异步重建索引完成: 共 {} 个词条", count);
+        } catch (Exception e) {
+            log.error("异步重建索引失败: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 同步重建索引（内部方法）
+     */
+    private int rebuildIndexSync() {
         List<KnowledgeEntry> entries = knowledgeEntryMapper.selectList(
                 new LambdaQueryWrapper<KnowledgeEntry>()
                         .in(KnowledgeEntry::getStatus, "approved", "pending"));
@@ -248,6 +270,13 @@ public class VectorSearchService {
     }
 
     /**
+     * 批量重建索引（同步，兼容旧接口）
+     */
+    public int rebuildIndex() {
+        return rebuildIndexSync();
+    }
+
+    /**
      * 获取索引统计信息
      */
     public Map<String, Object> getStats() {
@@ -255,7 +284,15 @@ public class VectorSearchService {
         stats.put("size", index.size());
         stats.put("dimension", index.getDimension());
         stats.put("hasEmbeddingConfig", llmService.getActiveEmbeddingConfig() != null);
+        stats.put("ready", indexReady);
         return stats;
+    }
+
+    /**
+     * 检查向量索引是否已就绪
+     */
+    public boolean isIndexReady() {
+        return indexReady;
     }
 
     // ==================== Embedding API 调用 ====================
@@ -280,7 +317,7 @@ public class VectorSearchService {
                 yield base + "/api/embeddings";
             }
             case "google" -> "https://generativelanguage.googleapis.com/v1beta/models/"
-                    + config.getModel() + ":embedContent?key=" + config.getApiKey();
+                    + config.getModel() + ":embedContent";
             case "siliconflow" -> {
                 String base = config.getBaseUrl() != null ? config.getBaseUrl() : "https://api.siliconflow.cn/v1";
                 yield base + "/embeddings";
@@ -307,14 +344,6 @@ public class VectorSearchService {
             root.put("input", text);
         }
         return mapper.writeValueAsString(root);
-    }
-
-    private String buildAuthHeader(LlmConfig config) {
-        if (config.getApiKey() == null || config.getApiKey().isEmpty()) return null;
-        return switch (config.getProvider()) {
-            case "google", "ollama" -> null;
-            default -> "Bearer " + config.getApiKey();
-        };
     }
 
     private float[] parseEmbeddingResponse(LlmConfig config, String responseBody) throws Exception {

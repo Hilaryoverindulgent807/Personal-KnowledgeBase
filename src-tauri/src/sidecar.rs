@@ -3,13 +3,61 @@ use tauri::AppHandle;
 use tauri::Manager;
 use tokio::process::{Child, Command};
 
+#[derive(serde::Serialize, serde::Deserialize, Default, Clone, Debug)]
+pub struct DesktopConfig {
+    pub custom_data_dir: Option<String>,
+    pub close_action: Option<String>, // "minimize" or "quit"
+}
+
+pub fn get_config_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    Ok(app_data.join("config.json"))
+}
+
+pub fn load_config(app: &AppHandle) -> DesktopConfig {
+    if let Ok(path) = get_config_path(app) {
+        if path.exists() {
+            if let Ok(content) = std::fs::read_to_string(path) {
+                if let Ok(config) = serde_json::from_str::<DesktopConfig>(&content) {
+                    return config;
+                }
+            }
+        }
+    }
+    DesktopConfig::default()
+}
+
+pub fn save_config(app: &AppHandle, config: &DesktopConfig) -> Result<(), String> {
+    let path = get_config_path(app)?;
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let content = serde_json::to_string_pretty(config).map_err(|e| e.to_string())?;
+    std::fs::write(path, content).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 /// Spring Boot JAR 的 sidecar 启动器
 /// 支持两种模式：
 /// 1. Sidecar 模式：从 Tauri bundle 中加载预打包的 JAR
 /// 2. 开发模式：直接通过 mvnw 启动
 pub fn start_spring_boot(app: &AppHandle) -> Result<Child, Box<dyn std::error::Error>> {
     let resource_dir = app.path().resource_dir()?;
-    let app_data_dir = app.path().app_data_dir()?;
+    let default_app_data_dir = app.path().app_data_dir()?;
+
+    // 加载自定义数据目录配置
+    let config = load_config(app);
+    let app_data_dir = if let Some(custom) = &config.custom_data_dir {
+        if !custom.trim().is_empty() {
+            let path = std::path::PathBuf::from(custom);
+            let _ = std::fs::create_dir_all(&path);
+            path
+        } else {
+            default_app_data_dir
+        }
+    } else {
+        default_app_data_dir
+    };
 
     // 确保数据目录存在
     std::fs::create_dir_all(&app_data_dir)?;
@@ -41,7 +89,11 @@ pub fn start_spring_boot(app: &AppHandle) -> Result<Child, Box<dyn std::error::E
 fn find_java() -> Result<String, Box<dyn std::error::Error>> {
     // 优先检查 JAVA_HOME
     if let Ok(java_home) = std::env::var("JAVA_HOME") {
-        let java_bin = format!("{}/bin/java", java_home);
+        let java_bin = if cfg!(windows) {
+            format!("{}/bin/java.exe", java_home)
+        } else {
+            format!("{}/bin/java", java_home)
+        };
         if std::path::Path::new(&java_bin).exists() {
             return Ok(java_bin);
         }
@@ -61,8 +113,13 @@ fn find_java() -> Result<String, Box<dyn std::error::Error>> {
 
 /// 查找 Spring Boot JAR 文件
 fn find_jar(resource_dir: &std::path::Path) -> Result<String, Box<dyn std::error::Error>> {
-    // 在 resource_dir 中查找 JAR
-    let jar_candidates = ["backend.jar", "intelligence-platform.jar"];
+    // 1. 检查候选的直接或子目录路径
+    let jar_candidates = [
+        "binaries/backend.jar",
+        "binaries/intelligence-platform.jar",
+        "backend.jar",
+        "intelligence-platform.jar",
+    ];
     for candidate in &jar_candidates {
         let jar = resource_dir.join(candidate);
         if jar.exists() {
@@ -70,14 +127,31 @@ fn find_jar(resource_dir: &std::path::Path) -> Result<String, Box<dyn std::error
         }
     }
 
-    // 在 resource_dir 的子目录中搜索
-    if let Ok(entries) = std::fs::read_dir(resource_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().map_or(false, |ext| ext == "jar") {
-                return Ok(path.to_string_lossy().to_string());
+    // 2. 递归在 resource_dir 及其所有子目录中搜索第一个 .jar 文件
+    fn find_jar_recursive(dir: &std::path::Path) -> Option<std::path::PathBuf> {
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            let mut subdirs = Vec::new();
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() {
+                    if path.extension().map_or(false, |ext| ext == "jar") {
+                        return Some(path);
+                    }
+                } else if path.is_dir() {
+                    subdirs.push(path);
+                }
+            }
+            for subdir in subdirs {
+                if let Some(jar_path) = find_jar_recursive(&subdir) {
+                    return Some(jar_path);
+                }
             }
         }
+        None
+    }
+
+    if let Some(jar_path) = find_jar_recursive(resource_dir) {
+        return Ok(jar_path.to_string_lossy().to_string());
     }
 
     Err(format!(

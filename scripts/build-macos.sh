@@ -5,9 +5,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+echo "  正在启动 macOS 桌面应用构建..."
 echo "========================================="
-2: echo "  正在启动 macOS 桌面应用构建..."
-3: echo "========================================="
 
 # 1. 检查必备环境
 echo "Checking prerequisites..."
@@ -62,10 +61,10 @@ cd "$ROOT_DIR/frontend-vue"
 npm install
 
 echo "-----------------------------------------"
-echo "4. 正在执行 Tauri 桌面打包 (npm run tauri:build)..."
+echo "4. 正在执行 Tauri 桌面打包..."
 echo "-----------------------------------------"
-# 使用 npx tauri 更加安全，无需依赖全局安装的 cargo-tauri CLI
-npx tauri build
+cd "$ROOT_DIR"
+npx --prefix frontend-vue tauri build
 
 echo "========================================="
 echo "🎉 构建成功完成！"

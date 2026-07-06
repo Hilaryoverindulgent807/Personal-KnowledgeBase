@@ -7,6 +7,26 @@ use tauri_plugin_global_shortcut::ShortcutState;
 
 pub(crate) struct BackendState(pub(crate) Mutex<Option<tokio::process::Child>>);
 
+impl Drop for BackendState {
+    fn drop(&mut self) {
+        let mut guard = self.0.lock().unwrap();
+        if let Some(mut child) = guard.take() {
+            println!("[tauri] Dropping BackendState, killing backend process...");
+            let _ = child.start_kill();
+        }
+    }
+}
+
+#[tauri::command]
+fn get_desktop_config(app: tauri::AppHandle) -> Result<sidecar::DesktopConfig, String> {
+    Ok(sidecar::load_config(&app))
+}
+
+#[tauri::command]
+fn save_desktop_config(app: tauri::AppHandle, config: sidecar::DesktopConfig) -> Result<(), String> {
+    sidecar::save_config(&app, &config)
+}
+
 #[tauri::command]
 fn backend_status(state: tauri::State<'_, BackendState>) -> String {
     let guard = state.0.lock().unwrap();
@@ -58,6 +78,95 @@ fn open_data_dir(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// 检查是否为首次运行（.first-run 文件不存在 = 首次运行）
+#[tauri::command]
+fn check_first_run(app: tauri::AppHandle) -> Result<bool, String> {
+    let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let first_run_file = app_data.join(".first-run");
+    Ok(!first_run_file.exists())
+}
+
+/// 标记首次运行已完成（创建 .first-run 文件）
+#[tauri::command]
+fn mark_first_run_complete(app: tauri::AppHandle) -> Result<(), String> {
+    let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let _ = std::fs::create_dir_all(&app_data);
+    let first_run_file = app_data.join(".first-run");
+    std::fs::write(&first_run_file, "1").map_err(|e| e.to_string())?;
+    println!("[tauri] First run marked complete: {:?}", first_run_file);
+    Ok(())
+}
+
+/// 重置所有数据（删除数据库、上传文件、向量索引、配置文件、.first-run 标志）
+/// 用于"恢复出厂设置"或数据清理场景
+#[tauri::command]
+async fn reset_all_data(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, BackendState>,
+) -> Result<String, String> {
+    // 1. 先停止后端
+    let child = {
+        let mut guard = state.0.lock().unwrap();
+        guard.take()
+    };
+    if let Some(mut child) = child {
+        let _ = crate::sidecar::stop_spring_boot(&mut child).await;
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    }
+
+    // 2. 获取数据目录
+    let config = sidecar::load_config(&app);
+    let default_app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let app_data_dir = if let Some(custom) = &config.custom_data_dir {
+        if !custom.trim().is_empty() {
+            std::path::PathBuf::from(custom)
+        } else {
+            default_app_data
+        }
+    } else {
+        default_app_data
+    };
+
+    // 3. 删除所有数据文件
+    let items_to_delete = [
+        app_data_dir.join("intelligence_platform.db"),
+        app_data_dir.join("intelligence_platform.db-shm"),
+        app_data_dir.join("intelligence_platform.db-wal"),
+        app_data_dir.join("vector-index.json"),
+        app_data_dir.join("config.json"),
+        app_data_dir.join(".first-run"),
+    ];
+
+    for item in &items_to_delete {
+        if item.exists() {
+            if item.is_dir() {
+                let _ = std::fs::remove_dir_all(item);
+            } else {
+                let _ = std::fs::remove_file(item);
+            }
+            println!("[tauri] Deleted: {:?}", item);
+        }
+    }
+
+    // 4. 删除 uploads 目录
+    let uploads_dir = app_data_dir.join("uploads");
+    if uploads_dir.exists() {
+        let _ = std::fs::remove_dir_all(&uploads_dir);
+        println!("[tauri] Deleted uploads dir: {:?}", uploads_dir);
+    }
+
+    // 5. 重新创建 uploads 目录
+    let _ = std::fs::create_dir_all(&uploads_dir);
+
+    // 6. 重新启动后端
+    let child = sidecar::start_spring_boot(&app).map_err(|e| e.to_string())?;
+    let mut guard = state.0.lock().unwrap();
+    *guard = Some(child);
+    tray::update_tray_icon(&app, true);
+
+    Ok("reset_complete".to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -78,6 +187,11 @@ pub fn run() {
             start_backend,
             stop_backend,
             open_data_dir,
+            get_desktop_config,
+            save_desktop_config,
+            check_first_run,
+            mark_first_run_complete,
+            reset_all_data,
         ])
         .setup(|app| {
             // 初始化系统托盘
@@ -139,9 +253,13 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                // 关闭窗口时隐藏到托盘，而非退出
-                api.prevent_close();
-                let _ = window.hide();
+                let app = window.app_handle();
+                let config = sidecar::load_config(app);
+                let close_action = config.close_action.unwrap_or_else(|| "minimize".to_string());
+                if close_action == "minimize" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
             }
         })
         .run(tauri::generate_context!())

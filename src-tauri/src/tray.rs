@@ -125,19 +125,28 @@ fn restart_backend(app: &AppHandle) {
 
 /// 使用系统文件管理器打开数据目录
 pub fn open_data_directory(app: &AppHandle) {
-    match app.path().app_data_dir() {
-        Ok(data_dir) => {
-            let _ = std::fs::create_dir_all(&data_dir);
-            if let Err(e) = app
-                .opener()
-                .open_path(data_dir.to_string_lossy().to_string(), None::<&str>)
-            {
-                eprintln!("[tray] Failed to open data directory: {}", e);
-            }
+    let config = crate::sidecar::load_config(app);
+    let data_dir = if let Some(custom) = &config.custom_data_dir {
+        if !custom.trim().is_empty() {
+            std::path::PathBuf::from(custom)
+        } else {
+            app.path().app_data_dir().unwrap_or_default()
         }
-        Err(e) => {
-            eprintln!("[tray] Failed to get app data directory: {}", e);
-        }
+    } else {
+        app.path().app_data_dir().unwrap_or_default()
+    };
+
+    if data_dir.as_os_str().is_empty() {
+        eprintln!("[tray] Data directory path is empty");
+        return;
+    }
+
+    let _ = std::fs::create_dir_all(&data_dir);
+    if let Err(e) = app
+        .opener()
+        .open_path(data_dir.to_string_lossy().to_string(), None::<&str>)
+    {
+        eprintln!("[tray] Failed to open data directory: {}", e);
     }
 }
 

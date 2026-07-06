@@ -557,6 +557,13 @@ except Exception as e:
             <p class="section-desc">配置本地桌面端的特定选项，包括系统托盘行为以及查看本地运行日志。</p>
             
             <el-form :model="desktopForm" label-width="140px" style="max-width: 600px;">
+              <el-form-item label="数据存储路径">
+                <div style="display: flex; gap: 10px; width: 100%;">
+                  <el-input v-model="desktopForm.customDataDir" placeholder="默认系统路径，点击右侧选择自定义目录..." readonly />
+                  <el-button type="primary" size="small" @click="handleSelectSettingsDir">选择目录</el-button>
+                </div>
+                <div class="form-hint" style="color: #94A3B8; font-size: 12px; margin-top: 4px;">保存 SQLite 数据库和上传文档的本地目录。修改后需重启应用以重新初始化后端。</div>
+              </el-form-item>
               
               <el-form-item label="关闭时行为">
                 <el-radio-group v-model="desktopForm.closeAction">
@@ -1359,13 +1366,14 @@ async function rebuildVectorIdx() {
 const desktopForm = reactive({
   minimizeToTray: true,
   closeAction: 'minimize', // 'minimize' or 'quit'
-  checkUpdateFrequency: 'daily'
+  checkUpdateFrequency: 'daily',
+  customDataDir: ''
 })
 
 const logs = ref<string[]>([])
 const loadingLogs = ref(false)
 
-import { isTauri } from '../../composables/useTauri'
+import { isTauri, openDirectory } from '../../composables/useTauri'
 
 async function handleOpenDataDir() {
   if (isTauri()) {
@@ -1378,6 +1386,13 @@ async function handleOpenDataDir() {
     }
   } else {
     ElMessage.warning('非桌面环境下无法打开数据目录')
+  }
+}
+
+async function handleSelectSettingsDir() {
+  const dir = await openDirectory()
+  if (dir) {
+    desktopForm.customDataDir = dir
   }
 }
 
@@ -1396,6 +1411,19 @@ async function loadDesktopConfigs() {
       console.error('Failed to parse desktop settings:', e)
     }
   }
+
+  if (isTauri()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      const rustConfig: any = await invoke('get_desktop_config')
+      if (rustConfig) {
+        desktopForm.customDataDir = rustConfig.custom_data_dir || ''
+        desktopForm.closeAction = rustConfig.close_action || 'minimize'
+      }
+    } catch (e) {
+      console.error('Failed to load desktop config from Rust:', e)
+    }
+  }
   
   // 首次加载也拉取日志
   fetchLogs()
@@ -1403,7 +1431,36 @@ async function loadDesktopConfigs() {
 
 async function saveDesktopConfig() {
   localStorage.setItem('desktopSettings', JSON.stringify(desktopForm))
-  ElMessage.success('桌面设置已保存')
+  
+  if (isTauri()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      // 检查路径是否更改
+      const rustConfig: any = await invoke('get_desktop_config')
+      const oldDir = rustConfig?.custom_data_dir || ''
+      const newDir = desktopForm.customDataDir || ''
+      
+      await invoke('save_desktop_config', {
+        config: {
+          custom_data_dir: newDir,
+          close_action: desktopForm.closeAction
+        }
+      })
+      
+      if (oldDir !== newDir) {
+        ElMessageBox.alert('存储路径已更改！新路径需要重启应用以启动后端数据库和文件服务，请手动重启应用。', '配置更新', {
+          confirmButtonText: '确定',
+          type: 'warning'
+        })
+      } else {
+        ElMessage.success('桌面设置已保存')
+      }
+    } catch (e: any) {
+      ElMessage.error('保存桌面设置失败: ' + e.message)
+    }
+  } else {
+    ElMessage.success('桌面设置已保存')
+  }
 }
 
 async function fetchLogs() {

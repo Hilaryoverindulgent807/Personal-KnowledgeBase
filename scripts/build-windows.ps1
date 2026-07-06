@@ -42,13 +42,13 @@ if (!(Test-Path $DummyExePath)) {
     New-Item -ItemType File -Path $DummyExePath -Force | Out-Null
 }
 
-# 4. 编译前端并构建 Tauri
 Write-Host "`n3. 正在安装前端依赖并执行编译..." -ForegroundColor Cyan
 Set-Location "$RootDir\frontend-vue"
 & npm install
 
 Write-Host "`n4. 正在执行 Tauri 桌面打包..." -ForegroundColor Cyan
-& npx tauri build
+Set-Location "$RootDir"
+& npx --prefix frontend-vue tauri build
 
 Write-Host "`n=========================================" -ForegroundColor Green
 Write-Host "🎉 构建成功完成！" -ForegroundColor Green

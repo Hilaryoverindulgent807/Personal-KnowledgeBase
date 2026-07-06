@@ -3,14 +3,17 @@ import { ref, reactive, onMounted } from 'vue'
 import { ArrowRight, Check, Back } from '@element-plus/icons-vue'
 import { createLlmConfig, createProject, setCurrentProjectId } from '../api'
 import { ElMessage } from 'element-plus'
+import { isTauri, openDirectory } from '../composables/useTauri'
 
 const isVisible = ref(false)
 const currentStep = ref(0)
 const loading = ref(false)
+const loadingText = ref('加载中...')
 
 const steps = [
   { title: '欢迎使用', description: '智能情报分析平台介绍' },
   { title: '配置大模型', description: '连接 AI 推理大脑' },
+  { title: '数据存储', description: '选择本地存储路径' },
   { title: '创建首个项目', description: '初始化知识空间' },
   { title: '大功告成', description: '准备开始工作' }
 ]
@@ -23,18 +26,60 @@ const wizardForm = reactive({
   llmApiKey: '',
   llmModel: 'deepseek-chat',
   llmBaseUrl: 'https://api.deepseek.com',
-  // Step 2: Project
+  // Step 2: Storage
+  customDataDir: '',
+  // Step 3: Project
   projectName: '无人智能情报库',
   projectDesc: '我的第一个无人系统与智能装备情报分析项目'
 })
 
-onMounted(() => {
-  // Check if first run
-  const isComplete = localStorage.getItem('firstRunComplete')
-  if (!isComplete) {
-    isVisible.value = true
+const storageMode = ref('default')
+const defaultDataDirPreview = ref('')
+
+onMounted(async () => {
+  // 检测首次运行：优先使用 .first-run 文件（Tauri环境），降级到 localStorage（开发模式）
+  if (isTauri()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      const isFirstRun = await invoke<boolean>('check_first_run')
+      if (isFirstRun) {
+        isVisible.value = true
+      }
+    } catch (e) {
+      // Tauri API 调用失败，降级到 localStorage
+      console.warn('[Wizard] check_first_run failed, falling back to localStorage:', e)
+      const isComplete = localStorage.getItem('firstRunComplete')
+      if (!isComplete) {
+        isVisible.value = true
+      }
+    }
+  } else {
+    // 浏览器开发模式：使用 localStorage
+    const isComplete = localStorage.getItem('firstRunComplete')
+    if (!isComplete) {
+      isVisible.value = true
+    }
+  }
+
+  // Load default data dir preview
+  if (isTauri()) {
+    try {
+      const { appDataDir } = await import('@tauri-apps/api/path')
+      defaultDataDirPreview.value = await appDataDir()
+    } catch (e) {
+      console.error(e)
+    }
+  } else {
+    defaultDataDirPreview.value = '浏览器环境：虚拟沙盒内存存储'
   }
 })
+
+async function handleSelectDataDir() {
+  const dir = await openDirectory()
+  if (dir) {
+    wizardForm.customDataDir = dir
+  }
+}
 
 const handleNext = async () => {
   if (currentStep.value === 1) {
@@ -46,6 +91,58 @@ const handleNext = async () => {
   }
 
   if (currentStep.value === 2) {
+    // Storage Step
+    if (storageMode.value === 'custom' && !wizardForm.customDataDir.trim()) {
+      ElMessage.warning('请选择自定义数据存储目录')
+      return
+    }
+
+    if (storageMode.value === 'custom' && wizardForm.customDataDir) {
+      loading.value = true
+      loadingText.value = '正在应用自定义存储路径，重启本地引擎...'
+      try {
+        const { invoke } = await import('@tauri-apps/api/core')
+        // 保存配置
+        await invoke('save_desktop_config', {
+          config: {
+            custom_data_dir: wizardForm.customDataDir,
+            close_action: 'minimize'
+          }
+        })
+        // 停止旧后端
+        await invoke('stop_backend')
+        await new Promise(resolve => setTimeout(resolve, 1500))
+        // 启动新后端
+        await invoke('start_backend')
+        // 轮询健康状态最多 30s
+        let ready = false
+        for (let i = 0; i < 30; i++) {
+          try {
+            const resp = await fetch('/api/health')
+            if (resp.ok) {
+              const json = await resp.json()
+              // HealthController 返回 { status: "UP", ... }，不是 { code: 200 }
+              if (json.status === 'UP') {
+                ready = true
+                break
+              }
+            }
+          } catch {}
+          await new Promise(resolve => setTimeout(resolve, 1000))
+        }
+        if (!ready) {
+          throw new Error('重启引擎超时，请检查引擎日志或手动重启。')
+        }
+      } catch (e: any) {
+        ElMessage.error('应用路径并重连引擎失败: ' + e.message)
+        loading.value = false
+        return
+      }
+      loading.value = false
+    }
+  }
+
+  if (currentStep.value === 3) {
     // Validate project name
     if (!wizardForm.projectName.trim()) {
       ElMessage.warning('请输入项目名称')
@@ -54,6 +151,7 @@ const handleNext = async () => {
     
     // Save LLM & Project
     loading.value = true
+    loadingText.value = '正在为您配置环境并创建首个项目...'
     try {
       // 1. Create LLM Config
       await createLlmConfig({
@@ -94,7 +192,17 @@ const handlePrev = () => {
   }
 }
 
-const handleFinish = () => {
+const handleFinish = async () => {
+  // Tauri 环境：创建 .first-run 标志文件
+  if (isTauri()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      await invoke('mark_first_run_complete')
+    } catch (e) {
+      console.error('[Wizard] Failed to mark first run complete:', e)
+    }
+  }
+  // 开发模式降级：仍使用 localStorage
   localStorage.setItem('firstRunComplete', 'true')
   isVisible.value = false
   // Reload page to apply state correctly
@@ -143,7 +251,7 @@ const onProviderChange = (val: string) => {
         <el-step v-for="step in steps" :key="step.title" :title="step.title" :description="step.description" />
       </el-steps>
 
-      <div class="step-content" v-loading="loading">
+      <div class="step-content" v-loading="loading" :element-loading-text="loadingText">
         <!-- Step 0: Welcome -->
         <div v-if="currentStep === 0" class="welcome-step text-center">
           <div class="icon-avatar">
@@ -153,7 +261,7 @@ const onProviderChange = (val: string) => {
               <circle cx="50" cy="50" r="10" fill="#00f2fe" />
             </svg>
           </div>
-          <h2>欢迎使用 智能情报分析平台</h2>
+          <h2>欢迎使用 智能情报 analysis 平台</h2>
           <p class="welcome-desc">
             这是一款面向无人系统（无人机/无人车/无人船/无人潜航器）研究分析人员设计的专业化个人知识管理与分析应用。
             基于 Graph-RAG (图增强检索) 技术，将零散文档自动抽取为知识词条，并深度连通。
@@ -195,8 +303,35 @@ const onProviderChange = (val: string) => {
           </el-form>
         </div>
 
-        <!-- Step 2: Create Project -->
+        <!-- Step 2: Storage Path Selection -->
         <div v-else-if="currentStep === 2" class="form-step">
+          <h3>选择数据存储目录</h3>
+          <p class="step-desc">平台的所有数据（包括 SQLite 数据库、导出的实体图谱及上传的文档物理文件）将存放于该目录中。</p>
+          
+          <el-form label-width="120px" class="wizard-form">
+            <el-form-item label="存储模式">
+              <el-radio-group v-model="storageMode">
+                <el-radio label="default">默认系统路径 (推荐)</el-radio>
+                <el-radio label="custom">自定义本地路径</el-radio>
+              </el-radio-group>
+            </el-form-item>
+            <el-form-item label="存储路径" v-if="storageMode === 'custom'">
+              <div style="display: flex; gap: 10px; width: 100%;">
+                <el-input v-model="wizardForm.customDataDir" placeholder="点击右侧按钮选择目录..." readonly />
+                <el-button type="primary" @click="handleSelectDataDir">选择目录</el-button>
+              </div>
+              <div class="form-hint" style="color: #94A3B8; font-size: 12px; margin-top: 4px;">
+                选择空文件夹或者已有数据库的文件夹。
+              </div>
+            </el-form-item>
+            <el-form-item label="路径预览" v-else>
+              <el-input v-model="defaultDataDirPreview" readonly disabled />
+            </el-form-item>
+          </el-form>
+        </div>
+
+        <!-- Step 3: Create Project -->
+        <div v-else-if="currentStep === 3" class="form-step">
           <h3>创建首个知识库项目</h3>
           <p class="step-desc">平台使用项目制进行隔离，一个项目包含独立的 SQLite 数据库文件、文档和独立的知识图谱。</p>
           
@@ -210,8 +345,8 @@ const onProviderChange = (val: string) => {
           </el-form>
         </div>
 
-        <!-- Step 3: Success -->
-        <div v-else-if="currentStep === 3" class="success-step text-center">
+        <!-- Step 4: Success -->
+        <div v-else-if="currentStep === 4" class="success-step text-center">
           <div class="success-icon-wrap">
             <el-icon class="success-icon" :size="60"><Check /></el-icon>
           </div>
@@ -243,10 +378,10 @@ const onProviderChange = (val: string) => {
 
     <template #footer>
       <div class="wizard-footer">
-        <el-button v-if="currentStep > 0 && currentStep < 3" @click="handlePrev">
+        <el-button v-if="currentStep > 0 && currentStep < 4" @click="handlePrev">
           <el-icon><Back /></el-icon> 上一步
         </el-button>
-        <el-button v-if="currentStep < 3" type="primary" @click="handleNext" :loading="loading">
+        <el-button v-if="currentStep < 4" type="primary" @click="handleNext" :loading="loading">
           下一步 <el-icon><ArrowRight /></el-icon>
         </el-button>
         <el-button v-else type="success" @click="handleFinish">

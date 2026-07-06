@@ -1,5 +1,6 @@
 package com.intelligence.platform.controller;
 
+import com.intelligence.platform.service.VectorSearchService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +23,9 @@ public class HealthController {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired(required = false)
+    private VectorSearchService vectorSearchService;
+
     @Value("${app.version:1.0.0}")
     private String appVersion;
 
@@ -41,6 +45,11 @@ public class HealthController {
 
         // 数据库连接测试
         result.put("database", buildDatabaseInfo());
+
+        // 向量索引状态
+        if (vectorSearchService != null) {
+            result.put("vectorIndex", vectorSearchService.getStats());
+        }
 
         // JVM 信息
         result.put("jvm", buildJvmInfo());
