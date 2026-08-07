@@ -127,19 +127,19 @@ export const saveSearchConfig = (data: Record<string, string>) => api.put('/sear
 export const testSearchConfig = (query?: string) => api.post('/search-config/test', { query: query || 'Spring Boot' })
 
 // Upload
+// 注意：不要手动设置 Content-Type: multipart/form-data，浏览器会自动添加正确的 boundary 参数
 export const uploadFile = (formData: FormData, url: string = '/upload/') => api.post(url, formData, {
-  headers: { 'Content-Type': 'multipart/form-data' },
   timeout: 120000, // 2分钟超时，适合大文件上传
 })
 export const uploadFromUrl = (data: { url: string; title?: string; categoryL1?: string; docType?: string; sourceOrigin?: string }) =>
   api.post('/upload/from-url', null, { params: data, timeout: 120000 })
 export const checkFileHash = (formData: FormData) => api.post('/upload/check-hash', formData, {
-  headers: { 'Content-Type': 'multipart/form-data' },
+  timeout: 30000,
 })
 export const getFileTypes = () => api.get('/upload/file-types')
 export const getLibraries = () => api.get('/upload/libraries')
 export const analyzeDocument = (formData: FormData) => api.post('/upload/analyze', formData, {
-  headers: { 'Content-Type': 'multipart/form-data' },
+  timeout: 120000,
 })
 export const getUploadTaskStatus = (docId: number) =>
   api.get(`/upload/task/${docId}`)
@@ -203,7 +203,6 @@ export const importSourceFolder = (data: { folderPath: string; categoryL1?: stri
   api.post('/sources/import-folder', null, { params: data })
 export const importSourceFile = (formData: FormData) =>
   api.post('/sources/import-file', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 120000,
   })
 export const deleteSource = (id: number) => api.delete(`/sources/${id}`)
@@ -239,7 +238,6 @@ export const ocrTableImage = (file: File) => {
   const formData = new FormData()
   formData.append('file', file)
   return api.post('/media/ocr-table', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 120000,
   })
 }
