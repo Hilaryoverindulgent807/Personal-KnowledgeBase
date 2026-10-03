@@ -85,8 +85,8 @@ async function loadData() {
   loading.value = false
 }
 
-function handleFileChange(file: UploadFile) {
-  fileList.value = [file]
+function handleFileChange(file: UploadFile, fileListNew: UploadFile[]) {
+  fileList.value = fileListNew
 }
 
 async function handleUpload() {
@@ -95,20 +95,33 @@ async function handleUpload() {
     return
   }
   uploading.value = true
+  let successCount = 0
+  let failCount = 0
   try {
-    const file = fileList.value[0]
-    const formData = new FormData()
-    formData.append('file', file.raw!)
-    formData.append('docType', 'report')
-    formData.append('sourceOrigin', uploadForm.sourceOrigin)
-    const res = await uploadFile(formData)
-    ElMessage.success(res.data.message || '上传成功')
+    for (const fileItem of fileList.value) {
+      try {
+        const formData = new FormData()
+        formData.append('file', fileItem.raw!)
+        formData.append('docType', 'report')
+        formData.append('sourceOrigin', uploadForm.sourceOrigin)
+        await uploadFile(formData)
+        successCount++
+      } catch (e: any) {
+        failCount++
+        console.error('文件上传失败:', fileItem.name, e)
+      }
+    }
+    if (failCount === 0) {
+      ElMessage.success(`全部 ${successCount} 个文件上传成功`)
+    } else {
+      ElMessage.warning(`${successCount} 个成功, ${failCount} 个失败`)
+    }
     showUpload.value = false
     fileList.value = []
     uploadForm.sourceOrigin = ''
     loadData()
   } catch (e: any) {
-    ElMessage.error('上传失败: ' + (e.message || ''))
+    ElMessage.error('上传异常: ' + (e.message || ''))
   }
   uploading.value = false
 }
